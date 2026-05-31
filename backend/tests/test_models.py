@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.core.models import Coordinates, OmegaSequence, PaletteItem, PhaseMatch
+from core.models import Coordinates, OmegaSequence, PaletteItem, PhaseMatch
 
 
 def make_palette_item(index: int) -> PaletteItem:

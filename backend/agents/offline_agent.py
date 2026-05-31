@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from backend.core.constants import MIN_CONFIDENCE_SYNTHETIC
-from backend.core.models import Coordinates, OmegaSequence, PaletteItem, PhaseMatch
-from backend.core.operators import OPERATORS
+from core.constants import MIN_CONFIDENCE_SYNTHETIC
+from core.models import Coordinates, OmegaSequence, PaletteItem, PhaseMatch
+from core.operators import OPERATORS
 
 from .base_agent import BaseAgent
 

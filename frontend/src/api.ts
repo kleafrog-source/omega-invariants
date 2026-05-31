@@ -1,6 +1,6 @@
 import type { AnalyzeResponse, OperatorsResponse } from "./types";
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "http://localhost:8011";
 
 export async function fetchOperators(): Promise<OperatorsResponse> {
   const response = await fetch(`${API_BASE_URL}/operators`);

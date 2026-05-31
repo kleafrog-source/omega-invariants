@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.core.models import OmegaResult, OperatorDefinition
+from core.models import OmegaResult, OperatorDefinition
 
 
 class AnalyzeRequest(BaseModel):

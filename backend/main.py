@@ -1,13 +1,25 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from backend.agents.offline_agent import OfflineAgent
-from backend.api.exporters import build_html_export, build_json_export
-from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, ExportRequest, OperatorsResponse
-from backend.core.omega_engine import OmegaEngine
-from backend.core.operators import OPERATORS
+from agents.offline_agent import OfflineAgent
+from api.exporters import build_html_export, build_json_export
+from api.schemas import AnalyzeRequest, AnalyzeResponse, ExportRequest, OperatorsResponse
+from core.omega_engine import OmegaEngine
+from core.operators import OPERATORS
 
 app = FastAPI(title="omega-invariants", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 agent = OfflineAgent()
 engine = OmegaEngine()

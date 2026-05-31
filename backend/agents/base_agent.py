@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from backend.core.models import OmegaSequence
+from core.models import OmegaSequence
 
 
 class BaseAgent(ABC):

@@ -1,4 +1,4 @@
-from backend.agents.offline_agent import OfflineAgent
+from agents.offline_agent import OfflineAgent
 
 
 def test_offline_agent_returns_normalized_sequence() -> None:

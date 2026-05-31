@@ -1,6 +1,6 @@
-from backend.core.models import Coordinates, OmegaSequence, PaletteItem, PhaseMatch
-from backend.core.omega_engine import OmegaEngine
-from backend.core.operators import OPERATORS
+from core.models import Coordinates, OmegaSequence, PaletteItem, PhaseMatch
+from core.omega_engine import OmegaEngine
+from core.operators import OPERATORS
 
 
 def make_sequence() -> OmegaSequence:

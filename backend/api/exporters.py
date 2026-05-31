@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from html import escape
 
-from backend.core.models import OmegaResult, OperatorDefinition
+from core.models import OmegaResult, OperatorDefinition
 
 
 def build_json_export(result: OmegaResult) -> str:
