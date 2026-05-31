@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from .axioms import validate_A5, validate_axioms
 from .constants import D_MAX_ACCEPTABLE, MAX_CORRECTION_ITERATIONS
-from .metrics import average_sigma, calculate_D, normalize_zero_flux, smooth_coordinates
+from .metrics import (
+    average_sigma,
+    calculate_D,
+    calculate_adaptive_rho_values,
+    calculate_sigma_per_phase,
+    normalize_zero_flux,
+    smooth_coordinates,
+)
 from .models import Coordinates, OmegaResult, OmegaSequence, PaletteItem
 
 
@@ -16,11 +23,12 @@ class OmegaEngine:
     def extract_coordinates(self, sequence: OmegaSequence) -> list[Coordinates]:
         return [item.coordinates for item in sequence.palette]
 
-    def calculate_metrics(self, coordinates: list[Coordinates]) -> tuple[float, list[float]]:
+    def calculate_metrics(self, coordinates: list[Coordinates]) -> tuple[float, list[float], list[float]]:
         sigma_avg = average_sigma(coordinates)
-        d_metric = calculate_D(coordinates=coordinates, sigma_avg=sigma_avg)
-        _, rho_values = validate_A5(coordinates)
-        return d_metric, rho_values
+        sigma_values = calculate_sigma_per_phase(coordinates)
+        rho_values = calculate_adaptive_rho_values(coordinates)
+        d_metric = calculate_D(coordinates=coordinates, sigma_avg=sigma_avg, rho_values=rho_values)
+        return d_metric, rho_values, sigma_values
 
     def apply_zero_flux_normalization(self, coordinates: list[Coordinates]) -> list[Coordinates]:
         return normalize_zero_flux(coordinates)
@@ -49,7 +57,7 @@ class OmegaEngine:
 
         corrections_applied: list[str] = []
         coordinates = self.apply_zero_flux_normalization(self.extract_coordinates(sequence))
-        d_metric, rho_values = self.calculate_metrics(coordinates)
+        d_metric, rho_values, sigma_values = self.calculate_metrics(coordinates)
 
         iteration = 0
         while d_metric > D_MAX_ACCEPTABLE and iteration < MAX_CORRECTION_ITERATIONS:
@@ -58,10 +66,18 @@ class OmegaEngine:
                 f"self_correction_iteration_{iteration + 1}: redistributed local drift and smoothed transitions"
             )
             iteration += 1
-            d_metric, rho_values = self.calculate_metrics(coordinates)
+            d_metric, rho_values, sigma_values = self.calculate_metrics(coordinates)
 
         validation = validate_axioms(sequence=sequence, coordinates=coordinates)
-        stability_flag = d_metric <= D_MAX_ACCEPTABLE and not validation.messages
+        stability_flag = d_metric <= D_MAX_ACCEPTABLE and all(
+            [
+                validation.A1_monotonic_path,
+                validation.A2_zero_flux,
+                validation.A3_recurrent_closure,
+                validation.A4_operator_isomorphism,
+                validation.A5_adaptive_density,
+            ]
+        )
 
         return OmegaResult(
             sequence=self.apply_template(sequence),
@@ -70,6 +86,7 @@ class OmegaEngine:
             coordinates=coordinates,
             D_metric=d_metric,
             rho_values=rho_values,
+            sigma_values=sigma_values,
             stability_flag=stability_flag,
             corrections_applied=corrections_applied,
             validation=validation,

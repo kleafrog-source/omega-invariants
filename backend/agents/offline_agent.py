@@ -66,6 +66,14 @@ class OfflineAgent(BaseAgent):
         "spectral": 0.9,
     }
 
+    DOMAIN_KEYWORDS = {
+        "phonetic": ("formant", "pitch", "harmonic", "spectrum"),
+        "spectral": ("frequency", "bandwidth", "resonance", "filter"),
+        "affective": ("emotion", "feeling", "mood", "tension", "release"),
+        "code": ("function", "loop", "variable", "return", "execute"),
+        "process": ("step", "phase", "workflow", "stage", "sequence"),
+    }
+
     def analyze(self, content: str, domain: str = "generic") -> OmegaSequence:
         normalized_content = content.strip()
         chunks = self._segment(normalized_content)
@@ -110,7 +118,14 @@ class OfflineAgent(BaseAgent):
             return self._synthetic_phase_match(phase_pattern)
 
         segment, start, end, match_count = best_match
-        confidence = self._calculate_confidence(match_count=match_count, domain=domain)
+        confidence = self._calculate_confidence(
+            markers=phase_pattern.markers,
+            context=segment,
+            phase_position=self._segment_position(chunks=chunks, start_offset=start),
+            expected_position=self._operator_index(phase_pattern.operator_id),
+            domain=domain,
+            marker_count=match_count,
+        )
         synthetic = confidence < MIN_CONFIDENCE_SYNTHETIC
         markers = list(phase_pattern.markers)
         if synthetic:
@@ -141,14 +156,61 @@ class OfflineAgent(BaseAgent):
             markers=[*phase_pattern.markers, "synthetic_missing"],
         )
 
-    def _calculate_confidence(self, match_count: int, domain: str) -> float:
-        raw_score = min(0.25 + max(match_count - 1, 0) * 0.15, 1.0)
+    def _calculate_confidence(
+        self,
+        markers: tuple[str, ...],
+        context: str,
+        phase_position: int,
+        expected_position: int,
+        domain: str,
+        marker_count: int,
+    ) -> float:
+        marker_score = min(max(marker_count, len(markers)) * 0.13, 0.40)
+
+        position_diff = abs(phase_position - expected_position)
+        if position_diff == 0:
+            position_score = 0.20
+        elif position_diff == 1:
+            position_score = 0.12
+        else:
+            position_score = 0.05
+
+        context_lower = context.casefold()
+        context_matches = sum(1 for marker in markers if marker.casefold() in context_lower)
+        context_score = min(context_matches * 0.10, 0.30)
+
+        domain_score = 0.0
+        for keyword in self.DOMAIN_KEYWORDS.get(domain, ()):
+            if keyword.casefold() in context_lower:
+                domain_score += 0.03
+        domain_score = min(domain_score, 0.10)
+
         domain_factor = self.DOMAIN_FACTORS.get(domain, 1.0)
-        return round(min(raw_score * domain_factor, 1.0), 3)
+        total = (marker_score + position_score + context_score + domain_score) * domain_factor
+        return round(min(max(total, 0.0), 1.0), 3)
 
     def _keyword_score(self, segment: str, keywords: tuple[str, ...]) -> int:
         normalized = segment.casefold()
         return sum(normalized.count(keyword.casefold()) for keyword in keywords)
+
+    def _segment_position(
+        self,
+        chunks: list[tuple[str, int, int]],
+        start_offset: int | None,
+    ) -> int:
+        if start_offset is None or not chunks:
+            return 0
+
+        for index, (_, start, _) in enumerate(chunks):
+            if start == start_offset:
+                return index
+        return 0
+
+    def _operator_index(self, operator_id: str) -> int:
+        for index, operator in enumerate(OPERATORS):
+            if operator.internal_id == operator_id:
+                return index
+        return 0
 
     def _build_palette_item(self, phase_match: PhaseMatch, index: int, domain: str) -> PaletteItem:
         operator = OPERATORS[index]
@@ -158,6 +220,9 @@ class OfflineAgent(BaseAgent):
             domain=domain,
             index=index,
             synthetic=phase_match.synthetic,
+            init_coordinates=None,
+            markers=tuple(phase_match.markers),
+            context=phase_match.source_text,
         )
         return PaletteItem(
             operator_id=phase_match.operator_id,
@@ -175,6 +240,9 @@ class OfflineAgent(BaseAgent):
         domain: str,
         index: int,
         synthetic: bool,
+        init_coordinates: Coordinates | None,
+        markers: tuple[str, ...],
+        context: str,
     ) -> Coordinates:
         operator_bias = {
             "init": {"A": 0.68, "S": 0.38, "T": 0.62, "E": 0.54},
@@ -200,9 +268,44 @@ class OfflineAgent(BaseAgent):
         index_shift = (index - 3) * 0.015
         synthetic_penalty = -0.08 if synthetic else 0.0
 
+        if operator_id == "focus" and init_coordinates is not None:
+            return self.generate_focus_coordinates(
+                init_coords=init_coordinates,
+                markers=markers,
+                context=context,
+            )
+
         values = {}
         for key, base_value in operator_bias.items():
             value = base_value + domain_shift[key] + confidence_shift + index_shift + synthetic_penalty
             values[key] = round(min(max(value, 0.0), 1.0), 3)
 
         return Coordinates(**values)
+
+    def generate_focus_coordinates(
+        self,
+        init_coords: Coordinates,
+        markers: tuple[str, ...],
+        context: str,
+    ) -> Coordinates:
+        transformed = {
+            "A": init_coords.A * 0.92 + 0.04,
+            "S": init_coords.S * 1.08 - 0.04,
+            "T": init_coords.T * 0.96 + 0.02,
+            "E": init_coords.E * 1.05 - 0.025,
+        }
+
+        focus_markers = {"converge", "final", "crystallize", "attractor", "focus"}
+        context_lower = context.casefold()
+        if any(marker.casefold() in focus_markers for marker in markers) or any(
+            token in context_lower for token in focus_markers
+        ):
+            transformed["S"] += 0.05
+            transformed["T"] -= 0.03
+
+        return Coordinates(
+            **{
+                key: round(min(max(value, 0.0), 1.0), 3)
+                for key, value in transformed.items()
+            }
+        )

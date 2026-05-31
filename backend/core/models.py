@@ -107,6 +107,7 @@ class OmegaResult(BaseModel):
     coordinates: list[Coordinates]
     D_metric: float = Field(ge=0.0)
     rho_values: list[float]
+    sigma_values: list[float]
     stability_flag: bool
     corrections_applied: list[str] = Field(default_factory=list)
     validation: ValidationReport

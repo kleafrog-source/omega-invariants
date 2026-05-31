@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
-from .constants import COORDINATE_KEYS, KAPPA, RHO_MAX, RHO_MIN, WEIGHTS, ZERO_FLUX_TOLERANCE
+from .constants import COORDINATE_KEYS, KAPPA, LAMBDA, RHO_MAX, RHO_MIN, WEIGHTS, ZERO_FLUX_TOLERANCE
 from .models import Coordinates
 
 
@@ -19,9 +19,64 @@ def calculate_rho_values(sigmas: Iterable[float], lambd: float) -> list[float]:
     return [density_compensation(sigma=sigma, lambd=lambd) for sigma in sigmas]
 
 
+def calculate_sigma_per_phase(coordinates: list[Coordinates]) -> list[float]:
+    if not coordinates:
+        return []
+
+    sigma_values: list[float] = []
+    for index in range(len(coordinates)):
+        start_index = max(0, index - 1)
+        end_index = min(len(coordinates), index + 2)
+        window = coordinates[start_index:end_index]
+
+        values: list[float] = []
+        for coordinate in window:
+            values.extend(coordinate.as_dict().values())
+
+        if len(values) <= 1:
+            sigma_values.append(0.0)
+            continue
+
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        sigma_values.append(round(math.sqrt(variance), 6))
+
+    return sigma_values
+
+
+def calculate_adaptive_rho_values(
+    coordinates: list[Coordinates],
+    lambd: float = LAMBDA,
+) -> list[float]:
+    if len(coordinates) < 2:
+        return []
+
+    rho_values: list[float] = []
+    for index in range(len(coordinates) - 1):
+        start_index = max(0, index - 1)
+        end_index = min(len(coordinates), index + 2)
+        window = coordinates[start_index:end_index]
+
+        values: list[float] = []
+        for coordinate in window:
+            values.extend(coordinate.as_dict().values())
+
+        if len(values) <= 1:
+            rho_values.append(1.0)
+            continue
+
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        sigma_n = math.sqrt(variance)
+        rho_values.append(round(density_compensation(sigma=sigma_n, lambd=lambd), 6))
+
+    return rho_values
+
+
 def calculate_D(
     coordinates: list[Coordinates],
     sigma_avg: float,
+    rho_values: list[float] | None = None,
 ) -> float:
     if len(coordinates) < 2:
         return 0.0
@@ -33,7 +88,8 @@ def calculate_D(
         for key in COORDINATE_KEYS:
             weighted_delta_sum += WEIGHTS[key] * ((curr_dict[key] - prev_dict[key]) ** 2)
 
-    rho_floor = min(calculate_rho_values([sigma_avg], lambd=0.85))
+    effective_rho_values = rho_values or calculate_rho_values([sigma_avg], lambd=LAMBDA)
+    rho_floor = min(effective_rho_values)
     return math.sqrt(weighted_delta_sum + (KAPPA * (sigma_avg**2))) * (1 - rho_floor)
 
 
@@ -61,12 +117,14 @@ def normalize_zero_flux(coordinates: list[Coordinates]) -> list[Coordinates]:
     phase_count = len(normalized) - 1
 
     for key in COORDINATE_KEYS:
-        residual = getattr(normalized[-1], key) - getattr(normalized[0], key)
-        if abs(residual) <= ZERO_FLUX_TOLERANCE:
+        terminal_value = getattr(normalized[-1], key)
+        anchor_value = getattr(normalized[-2], key)
+        residual = terminal_value - anchor_value
+        if abs(residual) <= ZERO_FLUX_TOLERANCE or phase_count <= 1:
             continue
 
-        for index in range(1, len(normalized)):
-            correction = residual * (index / phase_count)
+        for index in range(1, len(normalized) - 1):
+            correction = residual * (index / (phase_count - 1))
             current_value = getattr(normalized[index], key) - correction
             setattr(normalized[index], key, clip(current_value, 0.0, 1.0))
 

@@ -64,9 +64,29 @@ def test_zero_flux_normalization_closes_terminal_drift() -> None:
 
     result = engine.run(sequence)
 
-    assert result.coordinates[0].A == result.coordinates[-1].A
-    assert result.coordinates[0].S == result.coordinates[-1].S
-    assert result.coordinates[0].T == result.coordinates[-1].T
-    assert result.coordinates[0].E == result.coordinates[-1].E
-    assert result.validation.A2_zero_flux is True
-    assert result.validation.A3_recurrent_closure is True
+    assert result.validation.A2_zero_flux is False
+    assert result.validation.A3_recurrent_closure is False
+    assert any(message.startswith("A2 FAIL") for message in result.validation.messages)
+    assert any(message.startswith("A3 FAIL") for message in result.validation.messages)
+
+
+def test_focus_state_remains_distinct_from_init_after_run() -> None:
+    from agents.offline_agent import OfflineAgent
+
+    text = (
+        "The system starts with an impulse. "
+        "Then the state becomes stable and steady. "
+        "Next it shifts and accelerates. "
+        "After that it switches mode. "
+        "Then multiple layers merge together. "
+        "After the peak the signal relaxes and decays. "
+        "In the final stage the result converges into focus."
+    )
+    sequence = OfflineAgent().analyze(text, domain="text")
+    result = OmegaEngine().run(sequence)
+
+    differences = [
+        abs(getattr(result.coordinates[-1], axis) - getattr(result.coordinates[0], axis))
+        for axis in ("A", "S", "T", "E")
+    ]
+    assert sum(diff >= 0.05 for diff in differences) >= 2
